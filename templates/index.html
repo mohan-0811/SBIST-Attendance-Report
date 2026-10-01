@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Staff Attendance Report Generator</title>
+<style>
+  :root{--violet:#B2A1C7;--orange:#FAC090;--sky:#C5D9F1;--yellow:#FFFF00;--ink:#1f2430;--muted:#667085;--line:#e4e7ec;--bg:#f6f7fb;--brand:#4b3f72}
+  *{box-sizing:border-box} body{margin:0;font-family:system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+  header{background:var(--brand);color:#fff;padding:18px 28px} header h1{margin:0;font-size:20px} header p{margin:4px 0 0;opacity:.8;font-size:13px}
+  main{max-width:1100px;margin:22px auto;padding:0 16px;display:grid;gap:18px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px 20px}
+  .card h2{margin:0 0 12px;font-size:15px;display:flex;gap:8px;align-items:center}
+  .num{background:var(--brand);color:#fff;border-radius:50%;width:22px;height:22px;display:inline-grid;place-items:center;font-size:12px}
+  .drop{border:2px dashed #c3c8d6;border-radius:10px;padding:26px;text-align:center;cursor:pointer;color:var(--muted)}
+  .drop.over{background:#efeaf8;border-color:var(--brand)} .drop b{color:var(--ink)}
+  .row{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start}
+  .cal{width:350px} .cal-head{text-align:center;font-weight:600;margin-bottom:8px}
+  .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+  .dow{font-size:11px;text-align:center;color:var(--muted);padding:2px 0}
+  .day{aspect-ratio:1;border:1px solid var(--line);border-radius:8px;display:grid;place-items:center;cursor:pointer;user-select:none;font-size:14px;background:#fff}
+  .day:hover{outline:2px solid var(--brand)} .day.sunday{background:var(--yellow)} .day.holiday{background:var(--sky)} .empty{visibility:hidden}
+  .brushes{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+  .brush{border:2px solid var(--line);border-radius:20px;padding:6px 12px;font-size:13px;cursor:pointer;background:#fff}
+  .brush.on{border-color:var(--brand);box-shadow:0 0 0 2px #d9d2ee}
+  .dot{display:inline-block;width:11px;height:11px;border-radius:3px;border:1px solid #0003;margin-right:5px;vertical-align:-1px}
+  .side{flex:1;min-width:280px} label{font-size:13px;color:var(--muted);display:block;margin:10px 0 4px}
+  input[type=text],input[type=time]{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px}
+  button.p{background:var(--brand);color:#fff;border:0;border-radius:8px;padding:10px 16px;font-size:14px;cursor:pointer}
+  button.s{background:#fff;color:var(--brand);border:1px solid var(--brand);border-radius:8px;padding:10px 16px;font-size:14px;cursor:pointer}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .hint{font-size:12px;color:var(--muted);margin-top:4px}
+  table{border-collapse:collapse;width:100%;font-size:13px} th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left}
+  th{background:#f2f0f8;position:sticky;top:0} td.c,th.c{text-align:center}
+  .tag{border-radius:10px;padding:2px 9px;font-size:12px;display:inline-block}
+  .t-late{background:var(--violet)} .t-leave{background:var(--orange)} .t-ok{background:#d1fadf}
+  .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px} .err{color:#b42318;font-size:13px;margin-top:8px}
+  .hidden{display:none} a.dl{color:var(--brand);cursor:pointer;text-decoration:underline;font-size:12px}
+</style>
+</head>
+<body>
+<header><h1>Staff Attendance Report Generator</h1>
+<p>Upload the biometric CSV &amp; mark leaves, holidays, and get one stand-alone page per staff member.</p></header>
+<main>
+  <section class="card">
+    <h2><span class="num">1</span> Upload biometric CSV</h2>
+    <div class="drop" id="drop"><b>Click to choose</b> or drag &amp; drop the CSV here
+      <div id="fname" class="hint"></div></div>
+    <input type="file" id="file" accept=".csv,text/csv" class="hidden">
+    <div class="err" id="err"></div>
+  </section>
+
+  <section class="card hidden" id="calCard">
+    <h2><span class="num">2</span> Choose Sundays &amp; college holidays</h2>
+    <div class="row">
+      <div class="cal">
+        <div class="brushes">
+          <div class="brush on" data-b="sunday"><span class="dot" style="background:var(--yellow)"></span>Sunday</div>
+          <div class="brush" data-b="holiday"><span class="dot" style="background:var(--sky)"></span>Holiday</div>
+          <div class="brush" data-b="clear">Clear</div>
+        </div>
+        <div class="cal-head" id="calHead"></div>
+        <div class="grid" id="grid"></div>
+      </div>
+      <div class="side">
+        <p style="margin:0 0 6px;font-size:13px">Pick a colour, then click the dates. Sundays are pre-filled in yellow.
+          Everything else is calculated automatically: <span class="tag t-late">violet</span> late, <span class="tag t-leave">light orange</span> leave.</p>
+        <label>Or just type it (NLP): holidays</label>
+        <input type="text" id="nlpText" placeholder="e.g. 4th, 12 to 14 and 24 Sep  /  2nd saturday">
+        <div class="hint">Understands numbers, ranges, “Sep 4”, “every saturday”, “2nd and 4th saturday”.</div>
+        <div style="margin-top:8px"><button class="s" id="nlpBtn">Apply as holidays</button></div>
+        <label>Office in-time (later than this = late)</label>
+        <input type="time" id="cutoff" value="09:00" step="1" style="max-width:160px">
+        <div class="actions"><button class="p" id="calc">Calculate</button></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card hidden" id="resCard">
+    <h2><span class="num">3</span> Summary &amp; download</h2>
+    <div style="max-height:420px;overflow:auto"><table id="tbl"></table></div>
+    <div class="actions">
+      <button class="p" id="pdfAll">Download PDF (one page per staff)</button>
+      <button class="s" id="zipAll">Download separate PDF per staff (ZIP)</button>
+    </div>
+    <div class="err" id="err2"></div>
+  </section>
+</main>
+<script>
+let S=null, marks={}, brush='sunday';
+const $=id=>document.getElementById(id);
+const drop=$('drop'), file=$('file');
+drop.onclick=()=>file.click();
+['dragover','dragenter'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.add('over')}));
+['dragleave','drop'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.remove('over')}));
+drop.addEventListener('drop',ev=>{if(ev.dataTransfer.files[0])up(ev.dataTransfer.files[0])});
+file.onchange=()=>file.files[0]&&up(file.files[0]);
+
+async function up(f){
+  $('err').textContent='';$('fname').textContent=f.name+' - reading...';
+  const fd=new FormData();fd.append('file',f);
+  const r=await fetch('/api/upload',{method:'POST',body:fd});const j=await r.json();
+  if(!r.ok){$('err').textContent=j.error;$('fname').textContent='';return}
+  S=j;marks={};j.sundays.forEach(d=>marks[d]='sunday');
+  $('fname').textContent=`${f.name} - ${j.staff.length} staff, ${j.month_name} ${j.year}`;
+  $('calCard').classList.remove('hidden');$('resCard').classList.add('hidden');draw();
+}
+function draw(){
+  $('calHead').textContent=`${S.month_name} ${S.year}`;
+  const g=$('grid');g.innerHTML='';
+  ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(x=>g.insertAdjacentHTML('beforeend',`<div class="dow">${x}</div>`));
+  for(let i=0;i<S.first_weekday;i++)g.insertAdjacentHTML('beforeend','<div class="day empty"></div>');
+  for(let d=1;d<=S.days;d++){
+    const el=document.createElement('div');el.className='day '+(marks[d]||'');el.textContent=d;
+    el.onclick=()=>{if(brush==='clear')delete marks[d];else marks[d]=brush;draw()};
+    g.appendChild(el);
+  }
+}
+document.querySelectorAll('.brush').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.brush').forEach(x=>x.classList.remove('on'));b.classList.add('on');brush=b.dataset.b});
+$('nlpBtn').onclick=async()=>{
+  const r=await fetch('/api/nlp',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({text:$('nlpText').value,year:S.year,month:S.month})});
+  (await r.json()).days.forEach(d=>marks[d]='holiday');draw();
+};
+const payload=extra=>({token:S.token,cutoff:($('cutoff').value.length===5?$('cutoff').value+':00':$('cutoff').value),
+  sundays:Object.keys(marks).filter(d=>marks[d]==='sunday').map(Number),
+  holidays:Object.keys(marks).filter(d=>marks[d]==='holiday').map(Number),...extra});
+async function post(url,extra){
+  return fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload(extra))});
+}
+$('calc').onclick=async()=>{
+  const r=await post('/api/summary');const j=await r.json();
+  if(!r.ok){$('err2').textContent=j.error;return}
+  $('resCard').classList.remove('hidden');
+  $('tbl').innerHTML='<tr><th>S/L</th><th>Employee</th><th>Name</th><th class="c">Working days</th><th class="c">Present</th><th class="c">Days late</th><th class="c">Days leave</th><th></th></tr>'+
+   j.rows.map(x=>`<tr><td>${x.slno}</td><td>${x.emp_id}</td><td>${x.name}<div class="hint">${x.designation}</div></td>
+   <td class="c">${x.working}</td><td class="c">${x.present}</td>
+   <td class="c"><span class="tag ${x.late?'t-late':'t-ok'}">${x.late}</span></td>
+   <td class="c"><span class="tag ${x.leave?'t-leave':'t-ok'}">${x.leave}</span></td>
+   <td><a class="dl" data-id="${x.emp_id}">PDF</a></td></tr>`).join('');
+  document.querySelectorAll('a.dl').forEach(a=>a.onclick=()=>dl('/api/pdf',{emp_id:a.dataset.id},a.dataset.id+'.pdf'));
+  $('resCard').scrollIntoView({behavior:'smooth'});
+};
+async function dl(url,extra,name){
+  const r=await post(url,extra);
+  if(!r.ok){$('err2').textContent=(await r.json()).error;return}
+  const a=document.createElement('a');a.href=URL.createObjectURL(await r.blob());a.download=name;a.click();
+}
+$('pdfAll').onclick=()=>dl('/api/pdf',{},`${S.month_name}_${S.year}_attendance_report.pdf`);
+$('zipAll').onclick=()=>dl('/api/zip',{},`${S.month_name}_${S.year}_staff_reports.zip`);
+</script>
+</body></html>
